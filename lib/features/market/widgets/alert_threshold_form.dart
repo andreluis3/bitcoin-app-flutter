@@ -40,7 +40,9 @@ class AlertThresholdForm extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: upperController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'UP',
                     prefixIcon: Icon(Icons.trending_up),
@@ -51,7 +53,9 @@ class AlertThresholdForm extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: lowerController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: const InputDecoration(
                     labelText: 'DOWN',
                     prefixIcon: Icon(Icons.trending_down),

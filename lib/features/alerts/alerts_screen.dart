@@ -30,7 +30,10 @@ class AlertsScreen extends ConsumerWidget {
                   const Expanded(
                     child: Text(
                       'Histórico de alertas',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   IconButton(
@@ -39,7 +42,10 @@ class AlertsScreen extends ConsumerWidget {
                     icon: const Icon(Icons.refresh_rounded),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: appSurface,
                       borderRadius: BorderRadius.circular(999),
@@ -73,7 +79,8 @@ class AlertsScreen extends ConsumerWidget {
                           AlertHistoryTile(alert: alerts[index]),
                     );
                   },
-                  loading: () => const Center(child: CircularProgressIndicator()),
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
                   error: (error, stackTrace) => Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,

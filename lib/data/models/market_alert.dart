@@ -28,17 +28,19 @@ class MarketAlert {
       ),
       price: (json['price'] as num?)?.toDouble() ?? 0,
       threshold: (json['threshold'] as num?)?.toDouble() ?? 0,
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
       currency: json['currency'] as String? ?? 'USD',
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'direction': direction.name,
-        'price': price,
-        'threshold': threshold,
-        'createdAt': createdAt.toIso8601String(),
-        'currency': currency,
-      };
+    'id': id,
+    'direction': direction.name,
+    'price': price,
+    'threshold': threshold,
+    'createdAt': createdAt.toIso8601String(),
+    'currency': currency,
+  };
 }

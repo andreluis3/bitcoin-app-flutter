@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/market_alert.dart';
 
@@ -15,14 +16,21 @@ class NotificationService {
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
     );
-    await _plugin.initialize(settings);
 
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    await _plugin.initialize(settings: settings);
+
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+
     await android?.requestNotificationsPermission();
 
-    final ios = _plugin.resolvePlatformSpecificImplementation<
-        DarwinFlutterLocalNotificationsPlugin>();
+    final ios = _plugin
+        .resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin
+        >();
+
     await ios?.requestPermissions(alert: true, badge: true, sound: true);
 
     _initialized = true;
@@ -30,23 +38,36 @@ class NotificationService {
 
   Future<void> showMarketAlert(MarketAlert alert) async {
     await initialize();
+
     final isUp = alert.direction == AlertDirection.up;
     final currencySymbol = alert.currency == 'BRL' ? 'R\$' : '\$';
+
     final details = AndroidNotificationDetails(
       'btc_price_alerts',
       'Alertas de preço do Bitcoin',
-      channelDescription: 'Notificações quando o Bitcoin atinge um limite configurado.',
+      channelDescription:
+          'Notificações quando o Bitcoin atinge um limite configurado.',
       importance: Importance.max,
       priority: Priority.high,
       category: AndroidNotificationCategory.alarm,
     );
 
     await _plugin.show(
-      alert.id.hashCode,
-      isUp ? 'Bitcoin atingiu o limite superior' : 'Bitcoin atingiu o limite inferior',
-      'Preço: $currencySymbol${alert.price.toStringAsFixed(2)} · '
+      id: alert.id.hashCode,
+      title: isUp
+          ? 'Bitcoin atingiu o limite superior'
+          : 'Bitcoin atingiu o limite inferior',
+      body:
+          'Preço: $currencySymbol${alert.price.toStringAsFixed(2)} · '
           'Limite: $currencySymbol${alert.threshold.toStringAsFixed(2)}',
-      NotificationDetails(android: details, iOS: const DarwinNotificationDetails()),
+      notificationDetails: NotificationDetails(
+        android: details,
+        iOS: const DarwinNotificationDetails(),
+      ),
     );
   }
 }
+
+final notificationServiceProvider = Provider<NotificationService>((ref) {
+  return NotificationService();
+});

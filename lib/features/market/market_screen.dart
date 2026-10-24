@@ -69,12 +69,17 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                   const Expanded(
                     child: Text(
                       'Bitcoin Monitor',
-                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                   IconButton(
                     tooltip: 'Atualizar agora',
-                    onPressed: state.isLoading ? null : () => controller.refresh(),
+                    onPressed: state.isLoading
+                        ? null
+                        : () => controller.refresh(),
                     icon: const Icon(Icons.refresh_rounded),
                   ),
                 ],
@@ -84,11 +89,16 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: appSuccess.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: appSuccess.withValues(alpha: 0.35)),
+                      border: Border.all(
+                        color: appSuccess.withValues(alpha: 0.35),
+                      ),
                     ),
                     child: Text(
                       state.isLoading && currentPrice.price == 0
@@ -131,7 +141,8 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 ],
                 selected: {state.currency},
                 onSelectionChanged: (selection) {
-                  if (selection.isNotEmpty) controller.setCurrency(selection.first);
+                  if (selection.isNotEmpty)
+                    controller.setCurrency(selection.first);
                 },
               ),
               const SizedBox(height: 16),
@@ -178,11 +189,18 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
               MarketMetrics(
                 maxPrice: state.chartData.isEmpty
                     ? 0
-                    : state.chartData.map((c) => c.high).reduce((a, b) => a > b ? a : b),
+                    : state.chartData
+                          .map((c) => c.high)
+                          .reduce((a, b) => a > b ? a : b),
                 minPrice: state.chartData.isEmpty
                     ? 0
-                    : state.chartData.map((c) => c.low).reduce((a, b) => a < b ? a : b),
-                volume: state.chartData.fold(0.0, (sum, candle) => sum + candle.volume),
+                    : state.chartData
+                          .map((c) => c.low)
+                          .reduce((a, b) => a < b ? a : b),
+                volume: state.chartData.fold(
+                  0.0,
+                  (sum, candle) => sum + candle.volume,
+                ),
                 currency: state.currency,
               ),
               const SizedBox(height: 16),
@@ -192,14 +210,23 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 upperLimit: state.upperLimit,
                 lowerLimit: state.lowerLimit,
                 onSave: () async {
-                  final upper = double.tryParse(upperController.text.trim().replaceAll(',', '.'));
-                  final lower = double.tryParse(lowerController.text.trim().replaceAll(',', '.'));
-                  if (upper == null || lower == null || upper <= 0 || lower <= 0) {
+                  final upper = double.tryParse(
+                    upperController.text.trim().replaceAll(',', '.'),
+                  );
+                  final lower = double.tryParse(
+                    lowerController.text.trim().replaceAll(',', '.'),
+                  );
+                  if (upper == null ||
+                      lower == null ||
+                      upper <= 0 ||
+                      lower <= 0) {
                     _showMessage('Informe limites numéricos maiores que zero.');
                     return;
                   }
                   if (upper <= lower) {
-                    _showMessage('O limite superior deve ser maior que o inferior.');
+                    _showMessage(
+                      'O limite superior deve ser maior que o inferior.',
+                    );
                     return;
                   }
                   final saved = await controller.updateThresholds(
@@ -208,7 +235,9 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                   );
                   if (!mounted) return;
                   _showMessage(
-                    saved ? 'Limites salvos neste dispositivo.' : 'Não foi possível salvar os limites.',
+                    saved
+                        ? 'Limites salvos neste dispositivo.'
+                        : 'Não foi possível salvar os limites.',
                   );
                 },
               ),

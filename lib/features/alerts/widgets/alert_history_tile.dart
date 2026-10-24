@@ -14,7 +14,9 @@ class AlertHistoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final typeColor = alert.isUp ? appSuccess : appDanger;
     final typeLabel = alert.isUp ? 'UP' : 'DOWN';
-    final currency = alert.currency == 'USD' ? MarketCurrency.usd : MarketCurrency.brl;
+    final currency = alert.currency == 'USD'
+        ? MarketCurrency.usd
+        : MarketCurrency.brl;
 
     return Container(
       padding: const EdgeInsets.all(16),

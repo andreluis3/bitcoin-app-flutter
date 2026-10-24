@@ -44,26 +44,33 @@ class AlertService {
 
     // Dispara apenas quando o preço cruza o limite, não em cada atualização acima/abaixo.
     if (previousPrice < upperLimit && currentPrice >= upperLimit) {
-      events.add(_createAlert(
-        direction: AlertDirection.up,
-        price: currentPrice,
-        threshold: upperLimit,
-        currency: currencyCode,
-      ));
+      events.add(
+        _createAlert(
+          direction: AlertDirection.up,
+          price: currentPrice,
+          threshold: upperLimit,
+          currency: currencyCode,
+        ),
+      );
     }
     if (previousPrice > lowerLimit && currentPrice <= lowerLimit) {
-      events.add(_createAlert(
-        direction: AlertDirection.down,
-        price: currentPrice,
-        threshold: lowerLimit,
-        currency: currencyCode,
-      ));
+      events.add(
+        _createAlert(
+          direction: AlertDirection.down,
+          price: currentPrice,
+          threshold: lowerLimit,
+          currency: currencyCode,
+        ),
+      );
     }
 
     if (events.isNotEmpty) {
       final history = await getAlertHistory();
       history.insertAll(0, events);
-      final limited = history.take(_maxHistory).map((alert) => alert.toJson()).toList();
+      final limited = history
+          .take(_maxHistory)
+          .map((alert) => alert.toJson())
+          .toList();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_historyKey, jsonEncode(limited));
     }

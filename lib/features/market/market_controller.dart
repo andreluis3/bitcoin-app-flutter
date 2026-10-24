@@ -149,8 +149,10 @@ class MarketController extends Notifier<MarketState> {
         final key = _currencyKey(currency);
         final savedUpper = prefs.getDouble('$_upperKeyPrefix$key');
         final savedLower = prefs.getDouble('$_lowerKeyPrefix$key');
-        if (savedUpper != null && savedLower != null &&
-            savedUpper > savedLower && savedLower > 0) {
+        if (savedUpper != null &&
+            savedLower != null &&
+            savedUpper > savedLower &&
+            savedLower > 0) {
           upper = savedUpper;
           lower = savedLower;
         } else {
@@ -197,7 +199,11 @@ class MarketController extends Notifier<MarketState> {
   Future<void> setCurrency(MarketCurrency currency) async {
     if (currency == state.currency) return;
     _previousPrice = null;
-    state = state.copyWith(currency: currency, isLoading: true, clearError: true);
+    state = state.copyWith(
+      currency: currency,
+      isLoading: true,
+      clearError: true,
+    );
     await _loadLimitsFor(currency);
     await refresh();
   }
@@ -207,10 +213,7 @@ class MarketController extends Notifier<MarketState> {
     final key = _currencyKey(currency);
     final upper = prefs.getDouble('$_upperKeyPrefix$key');
     final lower = prefs.getDouble('$_lowerKeyPrefix$key');
-    state = state.copyWith(
-      upperLimit: upper ?? 0,
-      lowerLimit: lower ?? 0,
-    );
+    state = state.copyWith(upperLimit: upper ?? 0, lowerLimit: lower ?? 0);
   }
 
   Future<void> setPeriod(String period) async {
@@ -228,8 +231,14 @@ class MarketController extends Notifier<MarketState> {
     }
     final prefs = await SharedPreferences.getInstance();
     final key = _currencyKey(state.currency);
-    final upperSaved = await prefs.setDouble('$_upperKeyPrefix$key', upperLimit);
-    final lowerSaved = await prefs.setDouble('$_lowerKeyPrefix$key', lowerLimit);
+    final upperSaved = await prefs.setDouble(
+      '$_upperKeyPrefix$key',
+      upperLimit,
+    );
+    final lowerSaved = await prefs.setDouble(
+      '$_lowerKeyPrefix$key',
+      lowerLimit,
+    );
     if (!upperSaved || !lowerSaved) return false;
 
     state = state.copyWith(upperLimit: upperLimit, lowerLimit: lowerLimit);

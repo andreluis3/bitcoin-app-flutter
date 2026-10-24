@@ -37,7 +37,9 @@ class BitcoinChart extends StatelessWidget {
       );
     }
 
-    final spots = candles.asMap().entries
+    final spots = candles
+        .asMap()
+        .entries
         .map((entry) => FlSpot(entry.key.toDouble(), entry.value.close))
         .toList();
 
@@ -86,7 +88,10 @@ class BitcoinChart extends StatelessWidget {
             child: LineChart(
               LineChartData(
                 minX: 0,
-                maxX: (candles.length - 1).toDouble().clamp(1, double.infinity).toDouble(),
+                maxX: (candles.length - 1)
+                    .toDouble()
+                    .clamp(1, double.infinity)
+                    .toDouble(),
                 minY: minY,
                 maxY: maxY <= minY ? minY + 1 : maxY,
                 gridData: const FlGridData(show: false),
@@ -98,13 +103,17 @@ class BitcoinChart extends StatelessWidget {
                   touchTooltipData: LineTouchTooltipData(
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
-                        final index = spot.x.round().clamp(0, candles.length - 1);
+                        final index = spot.x.round().clamp(
+                          0,
+                          candles.length - 1,
+                        );
                         final candle = candles[index];
                         final price = formatPrice(
                           candle.close,
                           currency: currency,
                         );
-                        final date = DateFormat('dd/MM/yyyy HH:mm').format(candle.time);
+                        final date = DateFormat('dd/MM/yyyy HH:mm')
+                            .format(candle.time);
                         return LineTooltipItem(
                           '$price\n$date',
                           const TextStyle(

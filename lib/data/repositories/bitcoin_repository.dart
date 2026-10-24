@@ -67,7 +67,9 @@ class BitcoinRepository {
     );
     final decoded = jsonDecode(response.body);
     if (decoded is! List) {
-      throw const AppException('A Binance retornou candles em formato inválido.');
+      throw const AppException(
+        'A Binance retornou candles em formato inválido.',
+      );
     }
 
     return decoded.map((entry) {
