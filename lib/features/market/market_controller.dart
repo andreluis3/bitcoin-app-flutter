@@ -1,6 +1,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -56,7 +57,7 @@ class MarketState {
   }
 }
 
-class MarketController extends Notifier<MarketState> {
+class MarketController extends Notifier<MarketState> with WidgetsBindingObserver {
   late BitcoinRepository _repository;
   late AlertService _alertService;
   late NotificationService _notificationService;
@@ -79,11 +80,13 @@ class MarketController extends Notifier<MarketState> {
 
   @override
   MarketState build() {
+    WidgetsBinding.instance.addObserver(this);
     _repository = ref.watch(bitcoinRepositoryProvider);
     _alertService = ref.watch(alertServiceProvider);
     _notificationService = ref.watch(notificationServiceProvider);
 
     ref.onDispose(() {
+      WidgetsBinding.instance.removeObserver(this);
       _requestVersion++;
       _refreshTimer?.cancel();
     });
@@ -122,11 +125,30 @@ class MarketController extends Notifier<MarketState> {
 
     await refresh();
 
+    _startRefreshTimer();
+  }
+
+  void _startRefreshTimer() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => refresh(silent: true),
     );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.resumed) {
+      // Atualiza assim que o usuário retorna ao app e reinicia o timer.
+      unawaited(refresh(silent: true));
+      _startRefreshTimer();
+    } else if (lifecycleState == AppLifecycleState.paused ||
+        lifecycleState == AppLifecycleState.inactive ||
+        lifecycleState == AppLifecycleState.detached) {
+      // Não acumula consultas periódicas enquanto o app não está ativo.
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    }
   }
 
   String _currencyKey(MarketCurrency currency) {

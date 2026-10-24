@@ -1,15 +1,12 @@
 import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../data/models/market_alert.dart';
 import '../data/models/bitcoin_price.dart';
-import '../data/repositories/bitcoin_repository.dart';
 
 class AlertService {
-  AlertService(this._repository);
-
-  final BitcoinRepository _repository;
-
   static const _historyKey = 'btc_market_alert_history_v1';
   static const _maxHistory = 100;
 
@@ -23,10 +20,7 @@ class AlertService {
 
     try {
       final decoded = jsonDecode(raw);
-
-      if (decoded is! List) {
-        return <MarketAlert>[];
-      }
+      if (decoded is! List) return <MarketAlert>[];
 
       final history = decoded
           .whereType<Map>()
@@ -37,12 +31,10 @@ class AlertService {
           )
           .toList();
 
-      history.sort(
-        (a, b) => b.createdAt.compareTo(a.createdAt),
-      );
-
+      history.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return history;
     } catch (_) {
+      // Um histórico inválido não deve impedir o uso dos alertas.
       return <MarketAlert>[];
     }
   }
@@ -54,15 +46,11 @@ class AlertService {
     required double lowerLimit,
     required MarketCurrency currency,
   }) async {
-    final currencyCode =
-        currency == MarketCurrency.usd ? 'USD' : 'BRL';
-
+    final currencyCode = currency == MarketCurrency.usd ? 'USD' : 'BRL';
     final events = <MarketAlert>[];
 
-    // Dispara apenas quando o preço cruza o limite,
-    // não em cada atualização acima ou abaixo dele.
-    if (previousPrice < upperLimit &&
-        currentPrice >= upperLimit) {
+    // Dispara apenas no cruzamento do limite.
+    if (previousPrice < upperLimit && currentPrice >= upperLimit) {
       events.add(
         _createAlert(
           direction: AlertDirection.up,
@@ -73,8 +61,7 @@ class AlertService {
       );
     }
 
-    if (previousPrice > lowerLimit &&
-        currentPrice <= lowerLimit) {
+    if (previousPrice > lowerLimit && currentPrice <= lowerLimit) {
       events.add(
         _createAlert(
           direction: AlertDirection.down,
@@ -86,11 +73,9 @@ class AlertService {
     }
 
     if (events.isNotEmpty) {
-      // Garante uma lista modificável antes de inserir os eventos.
-      final history = List<MarketAlert>.from(
-        await getAlertHistory(),
-      );
-
+      // A cópia garante uma lista modificável mesmo se o histórico
+      // vier vazio ou tiver sido retornado por uma implementação imutável.
+      final history = List<MarketAlert>.from(await getAlertHistory());
       history.insertAll(0, events);
 
       final limited = history
@@ -99,11 +84,7 @@ class AlertService {
           .toList();
 
       final prefs = await SharedPreferences.getInstance();
-
-      await prefs.setString(
-        _historyKey,
-        jsonEncode(limited),
-      );
+      await prefs.setString(_historyKey, jsonEncode(limited));
     }
 
     return events;
@@ -116,7 +97,6 @@ class AlertService {
     required String currency,
   }) {
     final now = DateTime.now();
-
     return MarketAlert(
       id: '${now.microsecondsSinceEpoch}_${direction.name}',
       direction: direction,
@@ -135,5 +115,5 @@ class AlertService {
 }
 
 final alertServiceProvider = Provider<AlertService>((ref) {
-  return AlertService(ref.watch(bitcoinRepositoryProvider));
+  return AlertService();
 });
