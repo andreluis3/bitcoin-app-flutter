@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,42 +18,144 @@ class MarketScreen extends ConsumerStatefulWidget {
 }
 
 class _MarketScreenState extends ConsumerState<MarketScreen> {
-  final upperController = TextEditingController();
-  final lowerController = TextEditingController();
-  bool _syncingControllers = false;
+  final TextEditingController upperController = TextEditingController();
+  final TextEditingController lowerController = TextEditingController();
+
+  // Rascunhos independentes para cada moeda.
+  final Map<MarketCurrency, String> _upperDrafts = {};
+  final Map<MarketCurrency, String> _lowerDrafts = {};
+
+  MarketCurrency? _lastCurrency;
+  double? _lastUpperLimit;
+  double? _lastLowerLimit;
+
+  bool _isEditingUpper = false;
+  bool _isEditingLower = false;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    upperController.addListener(_onUpperChanged);
+    lowerController.addListener(_onLowerChanged);
+  }
+
+  void _onUpperChanged() {
+    final currency = _lastCurrency;
+    if (currency == null) return;
+
+    _upperDrafts[currency] = upperController.text;
+
+    if (!_isEditingUpper && upperController.text.isNotEmpty) {
+      _isEditingUpper = true;
+    }
+  }
+
+  void _onLowerChanged() {
+    final currency = _lastCurrency;
+    if (currency == null) return;
+
+    _lowerDrafts[currency] = lowerController.text;
+
+    if (!_isEditingLower && lowerController.text.isNotEmpty) {
+      _isEditingLower = true;
+    }
+  }
+
+  String _formatLimit(double value) {
+    return value > 0 ? value.toStringAsFixed(2) : '';
+  }
+
+  void _setControllerText(
+    TextEditingController controller,
+    String text,
+  ) {
+    if (controller.text == text) return;
+
+    controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  void _syncLimitFields({
+    required MarketCurrency currency,
+    required double upper,
+    required double lower,
+  }) {
+    final currencyChanged = _lastCurrency != currency;
+    final limitsChanged =
+        _lastUpperLimit != upper || _lastLowerLimit != lower;
+
+    if (!currencyChanged && !limitsChanged) return;
+
+    if (currencyChanged) {
+      // Guarda o que estava sendo digitado na moeda anterior.
+      final previousCurrency = _lastCurrency;
+      if (previousCurrency != null) {
+        _upperDrafts[previousCurrency] = upperController.text;
+        _lowerDrafts[previousCurrency] = lowerController.text;
+      }
+
+      _lastCurrency = currency;
+      _isEditingUpper = false;
+      _isEditingLower = false;
+
+      // Restaura o rascunho da moeda selecionada, se existir.
+      final upperDraft = _upperDrafts[currency];
+      final lowerDraft = _lowerDrafts[currency];
+
+      _setControllerText(
+        upperController,
+        upperDraft ?? _formatLimit(upper),
+      );
+      _setControllerText(
+        lowerController,
+        lowerDraft ?? _formatLimit(lower),
+      );
+    } else {
+      // Atualizações periódicas de preço não alteram os campos.
+      // Só sincroniza limites realmente alterados externamente
+      // quando o respectivo campo não está em edição.
+      if (!_isEditingUpper) {
+        _setControllerText(
+          upperController,
+          _formatLimit(upper),
+        );
+      }
+
+      if (!_isEditingLower) {
+        _setControllerText(
+          lowerController,
+          _formatLimit(lower),
+        );
+      }
+    }
+
+    _lastUpperLimit = upper;
+    _lastLowerLimit = lower;
+  }
 
   @override
   void dispose() {
+    upperController.removeListener(_onUpperChanged);
+    lowerController.removeListener(_onLowerChanged);
     upperController.dispose();
     lowerController.dispose();
     super.dispose();
-  }
-
-  void _syncLimitFields(double upper, double lower) {
-    if (_syncingControllers) return;
-    _syncingControllers = true;
-    final upperText = upper > 0 ? upper.toStringAsFixed(2) : '';
-    final lowerText = lower > 0 ? lower.toStringAsFixed(2) : '';
-    if (upperController.text != upperText) {
-      upperController.value = TextEditingValue(
-        text: upperText,
-        selection: TextSelection.collapsed(offset: upperText.length),
-      );
-    }
-    if (lowerController.text != lowerText) {
-      lowerController.value = TextEditingValue(
-        text: lowerText,
-        selection: TextSelection.collapsed(offset: lowerText.length),
-      );
-    }
-    _syncingControllers = false;
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(marketControllerProvider);
     final controller = ref.read(marketControllerProvider.notifier);
-    _syncLimitFields(state.upperLimit, state.lowerLimit);
+
+    _syncLimitFields(
+      currency: state.currency,
+      upper: state.upperLimit,
+      lower: state.lowerLimit,
+    );
 
     final currentPrice = state.price;
 
@@ -104,14 +207,20 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                       state.isLoading && currentPrice.price == 0
                           ? 'Binance: conectando'
                           : 'API: Binance · 5s',
-                      style: const TextStyle(color: appSuccess, fontSize: 11),
+                      style: const TextStyle(
+                        color: appSuccess,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Text(
                       'Cotações públicas · atualização automática',
-                      style: TextStyle(color: appTextSecondary, fontSize: 11),
+                      style: TextStyle(
+                        color: appTextSecondary,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 ],
@@ -124,11 +233,16 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                   decoration: BoxDecoration(
                     color: appDanger.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: appDanger.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: appDanger.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Text(
                     state.errorMessage!,
-                    style: const TextStyle(color: appDanger, fontSize: 12),
+                    style: const TextStyle(
+                      color: appDanger,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
@@ -136,13 +250,20 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
               SegmentedButton<MarketCurrency>(
                 selectedIcon: null,
                 segments: const [
-                  ButtonSegment(value: MarketCurrency.usd, label: Text('USD')),
-                  ButtonSegment(value: MarketCurrency.brl, label: Text('BRL')),
+                  ButtonSegment(
+                    value: MarketCurrency.usd,
+                    label: Text('USD'),
+                  ),
+                  ButtonSegment(
+                    value: MarketCurrency.brl,
+                    label: Text('BRL'),
+                  ),
                 ],
                 selected: {state.currency},
                 onSelectionChanged: (selection) {
-                  if (selection.isNotEmpty)
+                  if (selection.isNotEmpty) {
                     controller.setCurrency(selection.first);
+                  }
                 },
               ),
               const SizedBox(height: 16),
@@ -157,13 +278,17 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 children: [
                   const Text(
                     'Período',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const Spacer(),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children: ['1H', '24H', '7D', '1M', '1Y'].map((period) {
+                    children: ['1H', '24H', '7D', '1M', '1Y']
+                        .map((period) {
                       return ChoiceChip(
                         label: Text(period),
                         selected: state.selectedPeriod == period,
@@ -190,13 +315,13 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 maxPrice: state.chartData.isEmpty
                     ? 0
                     : state.chartData
-                          .map((c) => c.high)
-                          .reduce((a, b) => a > b ? a : b),
+                        .map((c) => c.high)
+                        .reduce((a, b) => a > b ? a : b),
                 minPrice: state.chartData.isEmpty
                     ? 0
                     : state.chartData
-                          .map((c) => c.low)
-                          .reduce((a, b) => a < b ? a : b),
+                        .map((c) => c.low)
+                        .reduce((a, b) => a < b ? a : b),
                 volume: state.chartData.fold(
                   0.0,
                   (sum, candle) => sum + candle.volume,
@@ -209,37 +334,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 lowerController: lowerController,
                 upperLimit: state.upperLimit,
                 lowerLimit: state.lowerLimit,
-                onSave: () async {
-                  final upper = double.tryParse(
-                    upperController.text.trim().replaceAll(',', '.'),
-                  );
-                  final lower = double.tryParse(
-                    lowerController.text.trim().replaceAll(',', '.'),
-                  );
-                  if (upper == null ||
-                      lower == null ||
-                      upper <= 0 ||
-                      lower <= 0) {
-                    _showMessage('Informe limites numéricos maiores que zero.');
-                    return;
-                  }
-                  if (upper <= lower) {
-                    _showMessage(
-                      'O limite superior deve ser maior que o inferior.',
-                    );
-                    return;
-                  }
-                  final saved = await controller.updateThresholds(
-                    upperLimit: upper,
-                    lowerLimit: lower,
-                  );
-                  if (!mounted) return;
-                  _showMessage(
-                    saved
-                        ? 'Limites salvos neste dispositivo.'
-                        : 'Não foi possível salvar os limites.',
-                  );
-                },
+                onSave: _isSaving ? null : () => _saveLimits(controller),
               ),
               const SizedBox(height: 16),
             ],
@@ -249,9 +344,75 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
     );
   }
 
+  Future<void> _saveLimits(MarketController controller) async {
+    if (_isSaving) return;
+
+    final upper = double.tryParse(
+      upperController.text.trim().replaceAll(',', '.'),
+    );
+    final lower = double.tryParse(
+      lowerController.text.trim().replaceAll(',', '.'),
+    );
+
+    if (upper == null ||
+        lower == null ||
+        !upper.isFinite ||
+        !lower.isFinite ||
+        upper <= 0 ||
+        lower <= 0) {
+      _showMessage('Informe limites numéricos maiores que zero.');
+      return;
+    }
+
+    if (upper <= lower) {
+      _showMessage(
+        'O limite superior deve ser maior que o inferior.',
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final saved = await controller.updateThresholds(
+        upperLimit: upper,
+        lowerLimit: lower,
+      );
+
+      if (!mounted) return;
+
+      if (saved) {
+        final currency = ref.read(marketControllerProvider).currency;
+
+        _upperDrafts[currency] = _formatLimit(upper);
+        _lowerDrafts[currency] = _formatLimit(lower);
+
+        _isEditingUpper = false;
+        _isEditingLower = false;
+
+        _setControllerText(upperController, _formatLimit(upper));
+        _setControllerText(lowerController, _formatLimit(lower));
+
+        _showMessage('Limites salvos neste dispositivo.');
+      } else {
+        _showMessage('Não foi possível salvar os limites.');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showMessage('Erro ao salvar os limites: $error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
   }
 }
