@@ -13,7 +13,10 @@ class MarketDataService {
     return _repository.getCurrentPrice(currency: currency);
   }
 
-  Future<List<BitcoinCandle>> fetchChartData({required String period}) {
-    return _repository.getDemoCandles(period: period);
+  Future<List<BitcoinCandle>> fetchChartData({
+    required String period,
+    MarketCurrency currency = MarketCurrency.usd,
+  }) {
+    return _repository.getCandles(period: period, currency: currency);
   }
 }

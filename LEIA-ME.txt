@@ -1,0 +1,31 @@
+BITCOIN MONITOR AI — PRIMEIRA RODADA DE ALTERAÇÕES
+
+Arquivos incluídos:
+- lib/features/market/market_controller.dart
+- lib/features/market/market_screen.dart
+- lib/features/market/widgets/bitcoin_chart.dart
+- lib/features/market/widgets/alert_threshold_form.dart
+- lib/data/models/market_alert.dart
+- lib/services/notification_service.dart
+- lib/services/alert_service.dart
+- lib/features/alerts/alerts_screen.dart
+- lib/features/alerts/widgets/alert_history_tile.dart
+- lib/services/market_data_service.dart
+- pubspec.yaml
+
+Como aplicar:
+1. Faça uma cópia/commit do projeto antes de substituir arquivos.
+2. Extraia o ZIP na raiz do projeto, mantendo a estrutura de pastas, e permita substituir os arquivos.
+3. Execute `flutter pub get`.
+4. Execute `dart format lib`.
+5. Execute `flutter analyze`.
+6. Execute `flutter run`.
+
+IMPORTANTE:
+- O histórico mockado do método getAlertHistory foi removido do código fornecido no ZIP.
+- Limites e histórico ficam salvos localmente no dispositivo usando SharedPreferences.
+- A atualização de 5 segundos ocorre enquanto o controller estiver ativo no app.
+- Notificações locais exigem compatibilidade/configuração do projeto Android. O plugin pode exigir ajustes adicionais no AndroidManifest.xml ou na configuração Gradle conforme a versão do template Android.
+- O alerta é gerado quando o preço cruza o limite entre duas consultas; não é um serviço remoto e não garante alertas com o app encerrado.
+- O arquivo pubspec.yaml foi reduzido para as dependências usadas/fornecidas. Se seu pubspec original contiver assets, fontes ou outras dependências adicionais, preserve essas seções ao aplicar a mudança em vez de sobrescrever cegamente o arquivo inteiro.
+- Antes de usar em produção, rode flutter analyze e envie os erros completos para corrigirmos diferenças de versão/API.

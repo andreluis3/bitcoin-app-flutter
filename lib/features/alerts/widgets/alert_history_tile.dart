@@ -14,6 +14,7 @@ class AlertHistoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final typeColor = alert.isUp ? appSuccess : appDanger;
     final typeLabel = alert.isUp ? 'UP' : 'DOWN';
+    final currency = alert.currency == 'USD' ? MarketCurrency.usd : MarketCurrency.brl;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -45,30 +46,34 @@ class AlertHistoryTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Preço ${formatPrice(alert.price, currency: alert.currency == 'USD' ? MarketCurrency.usd : MarketCurrency.brl)}',
+                  'Preço ${formatPrice(alert.price, currency: currency)}',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Limite ${formatPrice(alert.threshold, currency: alert.currency == 'USD' ? MarketCurrency.usd : MarketCurrency.brl)}',
+                  'Limite ${formatPrice(alert.threshold, currency: currency)}',
                   style: const TextStyle(color: appTextSecondary),
                 ),
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                formatDateTime(alert.createdAt),
-                style: const TextStyle(color: appTextSecondary, fontSize: 12),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                alert.currency,
-                style: const TextStyle(color: appTextSecondary, fontSize: 12),
-              ),
-            ],
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  formatDateTime(alert.createdAt),
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(color: appTextSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  alert.currency,
+                  style: const TextStyle(color: appTextSecondary, fontSize: 12),
+                ),
+              ],
+            ),
           ),
         ],
       ),

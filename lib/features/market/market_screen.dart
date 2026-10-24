@@ -19,6 +19,7 @@ class MarketScreen extends ConsumerStatefulWidget {
 class _MarketScreenState extends ConsumerState<MarketScreen> {
   final upperController = TextEditingController();
   final lowerController = TextEditingController();
+  bool _syncingControllers = false;
 
   @override
   void dispose() {
@@ -27,13 +28,31 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
     super.dispose();
   }
 
+  void _syncLimitFields(double upper, double lower) {
+    if (_syncingControllers) return;
+    _syncingControllers = true;
+    final upperText = upper > 0 ? upper.toStringAsFixed(2) : '';
+    final lowerText = lower > 0 ? lower.toStringAsFixed(2) : '';
+    if (upperController.text != upperText) {
+      upperController.value = TextEditingValue(
+        text: upperText,
+        selection: TextSelection.collapsed(offset: upperText.length),
+      );
+    }
+    if (lowerController.text != lowerText) {
+      lowerController.value = TextEditingValue(
+        text: lowerText,
+        selection: TextSelection.collapsed(offset: lowerText.length),
+      );
+    }
+    _syncingControllers = false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(marketControllerProvider);
     final controller = ref.read(marketControllerProvider.notifier);
-
-    upperController.text = state.upperLimit.toStringAsFixed(0);
-    lowerController.text = state.lowerLimit.toStringAsFixed(0);
+    _syncLimitFields(state.upperLimit, state.lowerLimit);
 
     final currentPrice = state.price;
 
@@ -46,20 +65,17 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Expanded(
                     child: Text(
                       'Bitcoin Monitor',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                      ),
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
                     ),
                   ),
-                  FilledButton.tonal(
-                    onPressed: controller.refresh,
-                    child: const Text('Atualizar'),
+                  IconButton(
+                    tooltip: 'Atualizar agora',
+                    onPressed: state.isLoading ? null : () => controller.refresh(),
+                    icon: const Icon(Icons.refresh_rounded),
                   ),
                 ],
               ),
@@ -68,29 +84,23 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: appSuccess.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: appSuccess.withValues(alpha: 0.35),
-                      ),
+                      border: Border.all(color: appSuccess.withValues(alpha: 0.35)),
                     ),
                     child: Text(
-                      state.isLoading ? 'Binance: conectando' : 'API: Binance',
-                      style: const TextStyle(
-                        color: appSuccess,
-                        fontSize: 11,
-                      ),
+                      state.isLoading && currentPrice.price == 0
+                          ? 'Binance: conectando'
+                          : 'API: Binance · 5s',
+                      style: const TextStyle(color: appSuccess, fontSize: 11),
                     ),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: const Text(
-                      'Cotações públicas em tempo real · atualização manual',
+                  const Expanded(
+                    child: Text(
+                      'Cotações públicas · atualização automática',
                       style: TextStyle(color: appTextSecondary, fontSize: 11),
                     ),
                   ),
@@ -121,9 +131,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 ],
                 selected: {state.currency},
                 onSelectionChanged: (selection) {
-                  if (selection.isNotEmpty) {
-                    controller.setCurrency(selection.first);
-                  }
+                  if (selection.isNotEmpty) controller.setCurrency(selection.first);
                 },
               ),
               const SizedBox(height: 16),
@@ -142,46 +150,39 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                   ),
                   const Spacer(),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: ['1H', '24H', '7D', '1M', '1Y']
-                        .map(
-                          (period) => ChoiceChip(
-                            label: Text(period),
-                            selected: state.selectedPeriod == period,
-                            onSelected: (_) => controller.setPeriod(period),
-                          ),
-                        )
-                        .toList(),
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: ['1H', '24H', '7D', '1M', '1Y'].map((period) {
+                      return ChoiceChip(
+                        label: Text(period),
+                        selected: state.selectedPeriod == period,
+                        onSelected: (_) => controller.setPeriod(period),
+                      );
+                    }).toList(),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              if (state.isLoading)
+              // Mantém o gráfico visível durante atualizações silenciosas.
+              if (state.chartData.isEmpty && state.isLoading)
                 const SizedBox(
                   height: 210,
                   child: Center(child: CircularProgressIndicator()),
                 )
               else
-                BitcoinChart(candles: state.chartData),
+                BitcoinChart(
+                  candles: state.chartData,
+                  currency: state.currency,
+                ),
               const SizedBox(height: 16),
               MarketMetrics(
-                maxPrice: state.chartData.fold(
-                  0.0,
-                  (previousValue, candle) =>
-                      candle.high > previousValue ? candle.high : previousValue,
-                ),
-                minPrice: state.chartData.fold(
-                  0.0,
-                  (previousValue, candle) =>
-                      candle.low < previousValue || previousValue == 0
-                      ? candle.low
-                      : previousValue,
-                ),
-                volume: state.chartData.fold(
-                  0.0,
-                  (previousValue, candle) => previousValue + candle.volume,
-                ),
+                maxPrice: state.chartData.isEmpty
+                    ? 0
+                    : state.chartData.map((c) => c.high).reduce((a, b) => a > b ? a : b),
+                minPrice: state.chartData.isEmpty
+                    ? 0
+                    : state.chartData.map((c) => c.low).reduce((a, b) => a < b ? a : b),
+                volume: state.chartData.fold(0.0, (sum, candle) => sum + candle.volume),
                 currency: state.currency,
               ),
               const SizedBox(height: 16),
@@ -190,49 +191,38 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
                 lowerController: lowerController,
                 upperLimit: state.upperLimit,
                 lowerLimit: state.lowerLimit,
-                onSave: () {
-                  final upper =
-                      double.tryParse(upperController.text) ?? state.upperLimit;
-                  final lower =
-                      double.tryParse(lowerController.text) ?? state.lowerLimit;
-
-                  if (upper <= 0 || lower <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Use valores maiores que zero para definir os limites.',
-                        ),
-                      ),
-                    );
+                onSave: () async {
+                  final upper = double.tryParse(upperController.text.trim().replaceAll(',', '.'));
+                  final lower = double.tryParse(lowerController.text.trim().replaceAll(',', '.'));
+                  if (upper == null || lower == null || upper <= 0 || lower <= 0) {
+                    _showMessage('Informe limites numéricos maiores que zero.');
                     return;
                   }
-
                   if (upper <= lower) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'O limite superior deve ser maior que o inferior.',
-                        ),
-                      ),
-                    );
+                    _showMessage('O limite superior deve ser maior que o inferior.');
                     return;
                   }
-
-                  controller.updateThresholds(
+                  final saved = await controller.updateThresholds(
                     upperLimit: upper,
                     lowerLimit: lower,
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Limites salvos com sucesso.'),
-                    ),
+                  if (!mounted) return;
+                  _showMessage(
+                    saved ? 'Limites salvos neste dispositivo.' : 'Não foi possível salvar os limites.',
                   );
                 },
               ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
       ),
     );
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 }
