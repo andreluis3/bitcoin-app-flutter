@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/models/bitcoin_candle.dart';
 import '../../data/models/bitcoin_price.dart';
-import '../../data/models/market_alert.dart';
 import '../../data/repositories/bitcoin_repository.dart';
 import '../../services/alert_service.dart';
 import '../../services/notification_service.dart';
@@ -57,7 +56,8 @@ class MarketState {
   }
 }
 
-class MarketController extends Notifier<MarketState> with WidgetsBindingObserver {
+class MarketController extends Notifier<MarketState>
+    with WidgetsBindingObserver {
   late BitcoinRepository _repository;
   late AlertService _alertService;
   late NotificationService _notificationService;
@@ -81,6 +81,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
   @override
   MarketState build() {
     WidgetsBinding.instance.addObserver(this);
+
     _repository = ref.watch(bitcoinRepositoryProvider);
     _alertService = ref.watch(alertServiceProvider);
     _notificationService = ref.watch(notificationServiceProvider);
@@ -89,6 +90,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
       WidgetsBinding.instance.removeObserver(this);
       _requestVersion++;
       _refreshTimer?.cancel();
+      _refreshTimer = null;
     });
 
     Future.microtask(_initialize);
@@ -114,22 +116,22 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
     try {
       await _loadLimitsFor(state.currency);
     } catch (_) {
-      // Se a leitura falhar, a consulta de mercado ainda pode continuar.
+      // Uma falha na leitura não impede a consulta de mercado.
     }
 
     try {
       await _notificationService.initialize();
     } catch (_) {
-      // Uma falha nas notificações não deve impedir a consulta da Binance.
+      // Uma falha nas notificações não impede a consulta da Binance.
     }
 
     await refresh();
-
     _startRefreshTimer();
   }
 
   void _startRefreshTimer() {
     _refreshTimer?.cancel();
+
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 5),
       (_) => refresh(silent: true),
@@ -137,15 +139,15 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
-    if (lifecycleState == AppLifecycleState.resumed) {
-      // Atualiza assim que o usuário retorna ao app e reinicia o timer.
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Atualiza assim que o usuário retorna ao app.
       unawaited(refresh(silent: true));
       _startRefreshTimer();
-    } else if (lifecycleState == AppLifecycleState.paused ||
-        lifecycleState == AppLifecycleState.inactive ||
-        lifecycleState == AppLifecycleState.detached) {
-      // Não acumula consultas periódicas enquanto o app não está ativo.
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      // Evita consultas periódicas enquanto o app está inativo.
       _refreshTimer?.cancel();
       _refreshTimer = null;
     }
@@ -179,12 +181,11 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
     final upper = prefs.getDouble('$_upperKeyPrefix$key');
     final lower = prefs.getDouble('$_lowerKeyPrefix$key');
 
-    final hasValidLimits =
-        upper != null &&
+    final hasValidLimits = upper != null &&
         lower != null &&
         _validLimits(upper, lower);
 
-    // Não aplique limites de uma moeda que deixou de estar selecionada.
+    // Não aplica limites de uma moeda que deixou de estar selecionada.
     if (currency != state.currency) return;
 
     state = state.copyWith(
@@ -194,7 +195,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
   }
 
   Future<void> refresh({bool silent = false}) async {
-    // Cada nova solicitação invalida as respostas de consultas anteriores.
+    // Invalida respostas de consultas anteriores.
     _requestVersion++;
 
     if (_isRefreshing) {
@@ -229,7 +230,6 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
           ]);
 
           if (!_isCurrentRequest(requestVersion, currency, period)) {
-            // Alguma configuração mudou durante a consulta.
             continue;
           }
 
@@ -247,10 +247,8 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
             }
 
             final key = _currencyKey(currency);
-            final savedUpper =
-                prefs.getDouble('$_upperKeyPrefix$key');
-            final savedLower =
-                prefs.getDouble('$_lowerKeyPrefix$key');
+            final savedUpper = prefs.getDouble('$_upperKeyPrefix$key');
+            final savedLower = prefs.getDouble('$_lowerKeyPrefix$key');
 
             if (savedUpper != null &&
                 savedLower != null &&
@@ -301,7 +299,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
               try {
                 await _notificationService.showMarketAlert(alert);
               } catch (_) {
-                // Falha na notificação não deve interromper o mercado.
+                // Falhas nas notificações não interrompem o mercado.
               }
             }
           }
@@ -322,10 +320,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
             clearError: true,
           );
 
-          // Se uma nova solicitação chegou durante o processamento,
-          // execute outra consulta com as configurações atuais.
-          if (_refreshPending ||
-              requestVersion != _requestVersion) {
+          if (_refreshPending || requestVersion != _requestVersion) {
             continue;
           }
 
@@ -341,8 +336,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
                 'Não foi possível carregar os dados da Binance: $error',
           );
 
-          if (_refreshPending ||
-              requestVersion != _requestVersion) {
+          if (_refreshPending || requestVersion != _requestVersion) {
             continue;
           }
 
@@ -352,8 +346,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
     } finally {
       _isRefreshing = false;
 
-      // Proteção adicional caso uma solicitação tenha chegado
-      // durante a finalização da consulta.
+      // Executa novamente se outra consulta ficou pendente.
       if (_refreshPending) {
         unawaited(refresh(silent: true));
       }
@@ -363,7 +356,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
   Future<void> setCurrency(MarketCurrency currency) async {
     if (currency == state.currency) return;
 
-    // Invalida imediatamente as respostas da moeda anterior.
+    // Invalida respostas da moeda anterior.
     _requestVersion++;
     _previousPrice = null;
     _previousCurrency = null;
@@ -379,7 +372,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
     try {
       await _loadLimitsFor(currency);
     } catch (_) {
-      // O refresh continuará mesmo se não for possível ler as preferências.
+      // O refresh continuará mesmo se a leitura falhar.
     }
 
     await refresh();
@@ -407,7 +400,7 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
     required double upperLimit,
     required double lowerLimit,
   }) async {
-    // Valida antes de tocar nas preferências ou no estado.
+    // Valida antes de modificar preferências ou estado.
     if (!_validLimits(upperLimit, lowerLimit)) {
       return false;
     }
@@ -415,13 +408,13 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
     final currency = state.currency;
     final key = _currencyKey(currency);
 
+    final upperKey = '$_upperKeyPrefix$key';
+    final lowerKey = '$_lowerKeyPrefix$key';
+
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Guarda os valores antigos para reverter uma gravação parcial.
-      final upperKey = '$_upperKeyPrefix$key';
-      final lowerKey = '$_lowerKeyPrefix$key';
-
+      // Guarda os valores antigos para permitir reversão.
       final oldUpper = prefs.getDouble(upperKey);
       final oldLower = prefs.getDouble(lowerKey);
 
@@ -438,19 +431,24 @@ class MarketController extends Notifier<MarketState> with WidgetsBindingObserver
       );
 
       if (!lowerSaved) {
-        // Reverte o primeiro valor se o segundo não for salvo.
+        // Restaura o limite superior anterior.
         if (oldUpper != null) {
           await prefs.setDouble(upperKey, oldUpper);
         } else {
           await prefs.remove(upperKey);
         }
 
+        // Restaura também o limite inferior anterior.
+        if (oldLower != null) {
+          await prefs.setDouble(lowerKey, oldLower);
+        } else {
+          await prefs.remove(lowerKey);
+        }
+
         return false;
       }
 
-      // A moeda pode ter mudado enquanto os dados eram gravados.
-      // Nesse caso, mantenha a persistência da moeda original, mas
-      // não aplique os limites à moeda atualmente exibida.
+      // Não aplica os limites à tela se a moeda mudou durante a gravação.
       if (currency == state.currency) {
         state = state.copyWith(
           upperLimit: upperLimit,

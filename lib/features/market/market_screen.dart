@@ -330,13 +330,17 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
               ),
               const SizedBox(height: 16),
               AlertThresholdForm(
-                upperController: upperController,
-                lowerController: lowerController,
-                upperLimit: state.upperLimit,
-                lowerLimit: state.lowerLimit,
-                onSave: _isSaving ? null : () => _saveLimits(controller),
-              ),
-              const SizedBox(height: 16),
+              upperController: upperController,
+              lowerController: lowerController,
+              upperLimit: state.upperLimit,
+              lowerLimit: state.lowerLimit,
+              onSave: () {
+                if (!_isSaving) {
+                  _saveLimits(controller);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
             ],
           ),
         ),
