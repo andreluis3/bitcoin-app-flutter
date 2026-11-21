@@ -67,6 +67,7 @@ Thumbs.db
 # Segredos e configurações locais
 .env
 .env.*
+/env.json
 !.env.example
 google-services.json
 key.properties
