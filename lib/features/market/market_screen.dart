@@ -169,13 +169,55 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
             children: [
               Row(
                 children: [
-                  const Expanded(
-                    child: Text(
-                      'Bitcoin Monitor',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                      ),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                  final narrow = constraints.maxWidth < 380;
+
+                  final periodChips = Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: ['1H', '24H', '7D', '1M', '1Y'].map((period) {
+                      return ChoiceChip(
+                        label: Text(period),
+                        selected: state.selectedPeriod == period,
+                        onSelected: (_) => controller.setPeriod(period),
+                      );
+                    }).toList(),
+                  );
+
+                  if (narrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Período',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        periodChips,
+                      ],
+                    );
+                  }
+
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'Período',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(child: periodChips),
+                          ],
+                        );
+                      },
                     ),
                   ),
                   IconButton(

@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
@@ -21,6 +22,7 @@ class MarketMetrics extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final symbol = currency == MarketCurrency.usd ? '\$' : 'R\$';
+
     final metrics = [
       _MetricTile(
         label: 'Máxima',
@@ -36,23 +38,32 @@ class MarketMetrics extends StatelessWidget {
       ),
     ];
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: metrics.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.5,
-      ),
-      itemBuilder: (context, index) => metrics[index],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth < 380 ? 2 : 3;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: metrics.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            mainAxisExtent: 88,
+          ),
+          itemBuilder: (context, index) => metrics[index],
+        );
+      },
     );
   }
 }
 
 class _MetricTile extends StatelessWidget {
-  const _MetricTile({required this.label, required this.value});
+  const _MetricTile({
+    required this.label,
+    required this.value,
+  });
 
   final String label;
   final String value;
@@ -60,7 +71,10 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 10,
+      ),
       decoration: BoxDecoration(
         color: appSurface,
         borderRadius: BorderRadius.circular(16),
@@ -68,18 +82,30 @@ class _MetricTile extends StatelessWidget {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             label,
-            style: const TextStyle(color: appTextSecondary, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              color: appTextPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+              color: appTextSecondary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: appTextPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ],

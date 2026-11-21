@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
@@ -21,13 +22,16 @@ class BitcoinPriceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPositive = changePercent24h >= 0;
+
     final priceText = isLoading
         ? 'Conectando...'
         : price.price == 0
-        ? '--'
-        : formatPrice(price.price, currency: currency);
+            ? '--'
+            : formatPrice(price.price, currency: currency);
 
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         gradient: const LinearGradient(
@@ -36,18 +40,19 @@ class BitcoinPriceCard extends StatelessWidget {
           end: Alignment.centerRight,
         ),
       ),
-      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Bitcoin',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: appTextPrimary,
-                  fontWeight: FontWeight.w600,
+              const Expanded(
+                child: Text(
+                  'Bitcoin',
+                  style: TextStyle(
+                    color: appTextPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               Container(
@@ -61,18 +66,34 @@ class BitcoinPriceCard extends StatelessWidget {
                 ),
                 child: const Text(
                   'Binance',
-                  style: TextStyle(color: appTextPrimary, fontSize: 11),
+                  style: TextStyle(
+                    color: appTextPrimary,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 18),
-          Text(
-            priceText,
-            style: Theme.of(context).textTheme.displaySmall
-                ?.copyWith(color: appTextPrimary, fontWeight: FontWeight.w700),
+
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                priceText,
+                maxLines: 1,
+                style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      color: appTextPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
           ),
+
           const SizedBox(height: 12),
+
           Row(
             children: [
               Icon(
@@ -82,13 +103,17 @@ class BitcoinPriceCard extends StatelessWidget {
                 color: isPositive ? appSuccess : appDanger,
               ),
               const SizedBox(width: 8),
-              Text(
-                isLoading || price.price == 0
-                    ? 'Aguardando cotação'
-                    : formatPercent(changePercent24h),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: isPositive ? appSuccess : appDanger,
-                  fontWeight: FontWeight.w700,
+              Flexible(
+                child: Text(
+                  isLoading || price.price == 0
+                      ? 'Aguardando cotação'
+                      : formatPercent(changePercent24h),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: isPositive ? appSuccess : appDanger,
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
               ),
             ],
