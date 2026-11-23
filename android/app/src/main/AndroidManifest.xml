@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="monitor_btc_ai"
+        android:label="CryptoMega 1.0"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

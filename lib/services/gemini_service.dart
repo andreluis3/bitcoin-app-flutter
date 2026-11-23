@@ -1,16 +1,12 @@
-
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 class GeminiReply {
-  const GeminiReply({
-    required this.text,
-    required this.interactionId,
-  });
-
+  const GeminiReply({required this.text, required this.interactionId});
   final String text;
   final String interactionId;
 }
@@ -18,18 +14,19 @@ class GeminiReply {
 class GeminiService {
   GeminiService({http.Client? client}) : _client = client ?? http.Client();
 
+  // Set at build/run time. Never print this value in logs.
   static const String _apiKey = String.fromEnvironment('GEMINI_API_KEY');
-  static const String _model = 'gemini-3.8-flash';
+  static const String _model =
+      String.fromEnvironment('GEMINI_MODEL', defaultValue: 'gemini-3.8-flash');
 
-  // Uri.https não é const. Por isso usamos static final.
   static final Uri _endpoint = Uri.https(
     'generativelanguage.googleapis.com',
     '/v1beta/interactions',
   );
 
   final http.Client _client;
-
   bool get isConfigured => _apiKey.trim().isNotEmpty;
+  String get modelName => _model;
 
   Future<GeminiReply> sendMessage({
     required String prompt,
@@ -38,21 +35,21 @@ class GeminiService {
   }) async {
     if (!isConfigured) {
       throw const GeminiException(
-        'A chave do Gemini não foi configurada. Execute o aplicativo '
-        'com --dart-define=GEMINI_API_KEY=SUA_CHAVE.',
+        'A chave do Gemini não foi carregada. Inicie o app com '
+        '--dart-define-from-file=env.json (arquivo JSON local).',
         kind: GeminiErrorKind.notConfigured,
       );
     }
 
-    final instructions = '''
-Você é o Analista BTC, assistente do aplicativo Bitcoin Monitor AI.
-Responda sempre em português do Brasil, com clareza e objetividade.
-Ajude a interpretar o mercado de Bitcoin, explicar indicadores e riscos.
-Não invente cotações, notícias, indicadores ou dados que não estejam no contexto.
-Não prometa lucro e não trate suas respostas como recomendação financeira.
-Quando os dados forem insuficientes, deixe isso explícito.
+    final input = '''
+CONTEXTO DO SISTEMA:
+Você é o Analista BTC do aplicativo Bitcoin Monitor AI.
+Responda em português do Brasil, com clareza e objetividade.
+Explique o mercado e indicadores, sem prometer lucro ou dar recomendação financeira.
+Não invente cotações, notícias, indicadores ou dados ausentes.
+Se os dados forem insuficientes, informe isso explicitamente.
 
-CONTEXTO ATUAL DO APLICATIVO:
+CONTEXTO DE MERCADO DISPONÍVEL:
 $marketContext
 
 MENSAGEM DO USUÁRIO:
@@ -61,165 +58,183 @@ $prompt
 
     final body = <String, dynamic>{
       'model': _model,
-      'input': instructions,
+      'input': input,
+      'store': true,
       if (previousInteractionId != null &&
           previousInteractionId.trim().isNotEmpty)
         'previous_interaction_id': previousInteractionId,
     };
 
-    late http.Response response;
-
+    late final http.Response response;
     try {
       response = await _client
           .post(
             _endpoint,
             headers: {
               'Content-Type': 'application/json',
-              'x-goog-api-key': _apiKey,
+              'x-goog-api-key': _apiKey.trim(),
             },
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 60));
     } on TimeoutException {
       throw const GeminiException(
-        'O Gemini demorou muito para responder. Tente novamente.',
+        'A solicitação excedeu 60 segundos. Verifique a conexão e tente novamente.',
         kind: GeminiErrorKind.timeout,
+      );
+    } on SocketException {
+      throw const GeminiException(
+        'Sem conexão com a internet. Verifique sua rede e tente novamente.',
+        kind: GeminiErrorKind.connection,
       );
     } on http.ClientException {
       throw const GeminiException(
-        'Não foi possível comunicar com o Gemini. '
-        'Verifique sua conexão com a internet.',
-        kind: GeminiErrorKind.connection,
-      );
-    } catch (_) {
-      throw const GeminiException(
-        'Ocorreu uma falha de comunicação com o Gemini. Tente novamente.',
+        'Não foi possível estabelecer conexão com a API do Google Gemini.',
         kind: GeminiErrorKind.connection,
       );
     }
 
-    Map<String, dynamic> decoded;
-
-    try {
-      final value = jsonDecode(response.body);
-      decoded = value is Map<String, dynamic>
-          ? value
-          : <String, dynamic>{};
-    } catch (_) {
-      decoded = <String, dynamic>{};
-    }
-
+    final decoded = _decodeObject(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final error = decoded['error'];
-      final apiMessage =
-          error is Map ? error['message']?.toString() : null;
-      final apiCode = error is Map ? error['code']?.toString() : null;
+      final apiMessage = error is Map
+          ? (error['message'] ?? error['status'] ?? error['code'])?.toString()
+          : null;
+      final detail = _safeDetail(apiMessage);
 
-      final isHighDemand = response.statusCode == 503 ||
-          apiCode == 'service_unavailable' ||
-          (apiMessage?.toLowerCase().contains('high demand') ?? false);
-
-      if (isHighDemand) {
-        throw const GeminiException(
-          'O Gemini está com alta demanda no momento e não consegue '
-          'processar novas solicitações. Aguarde alguns instantes e '
-          'tente enviar sua mensagem novamente.',
-          kind: GeminiErrorKind.highDemand,
-          statusCode: 503,
-        );
+      switch (response.statusCode) {
+        case 400:
+          throw GeminiException(
+            'A API rejeitou a requisição (HTTP 400). Verifique o modelo, '
+            'o formato da solicitação e o ID da interação anterior.'
+            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
+            kind: GeminiErrorKind.request,
+            statusCode: 400,
+          );
+        case 401:
+        case 403:
+          throw GeminiException(
+            'A API recusou a autenticação/autorização (HTTP ${response.statusCode}). '
+            'Confira se a chave é válida e se a Gemini API está habilitada.',
+            kind: GeminiErrorKind.authentication,
+            statusCode: response.statusCode,
+          );
+        case 404:
+          throw GeminiException(
+            'O recurso não foi encontrado (HTTP 404). Confira o identificador '
+            'do modelo "$_model" e a disponibilidade do endpoint Interactions.'
+            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
+            kind: GeminiErrorKind.modelOrEndpoint,
+            statusCode: 404,
+          );
+        case 429:
+          throw GeminiException(
+            'A cota ou o limite de requisições do Gemini foi atingido (HTTP 429). '
+            'Confira os limites do projeto no Google AI Studio e tente novamente.'
+            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
+            kind: GeminiErrorKind.rateLimit,
+            statusCode: 429,
+          );
+        case 500:
+        case 502:
+        case 503:
+        case 504:
+          throw GeminiException(
+            'O serviço do Google Gemini está temporariamente indisponível '
+            '(HTTP ${response.statusCode}). Isso não confirma, por si só, '
+            'que seja alta demanda. Tente novamente mais tarde.'
+            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
+            kind: GeminiErrorKind.server,
+            statusCode: response.statusCode,
+          );
+        default:
+          throw GeminiException(
+            'A API do Gemini retornou HTTP ${response.statusCode}.'
+            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
+            kind: GeminiErrorKind.request,
+            statusCode: response.statusCode,
+          );
       }
-
-      if (response.statusCode == 429) {
-        throw const GeminiException(
-          'O limite de solicitações do Gemini foi atingido. '
-          'Aguarde um pouco antes de tentar novamente.',
-          kind: GeminiErrorKind.rateLimit,
-          statusCode: 429,
-        );
-      }
-
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        throw GeminiException(
-          'O Google recusou a autenticação da API (HTTP '
-          '${response.statusCode}). Verifique sua chave e as permissões.',
-          kind: GeminiErrorKind.authentication,
-          statusCode: response.statusCode,
-        );
-      }
-
-      if (response.statusCode >= 500) {
-        throw GeminiException(
-          'O serviço do Gemini está temporariamente indisponível '
-          '(HTTP ${response.statusCode}). Tente novamente mais tarde.',
-          kind: GeminiErrorKind.server,
-          statusCode: response.statusCode,
-        );
-      }
-
-      throw GeminiException(
-        apiMessage?.isNotEmpty == true
-            ? 'O Gemini retornou um erro: $apiMessage'
-            : 'O Gemini retornou o erro HTTP ${response.statusCode}.',
-        kind: GeminiErrorKind.request,
-        statusCode: response.statusCode,
-      );
     }
 
     final interactionId = decoded['id']?.toString();
     final answer = _extractOutputText(decoded);
-
-    if (interactionId == null ||
-        interactionId.isEmpty ||
-        answer.trim().isEmpty) {
+    if (interactionId == null || interactionId.isEmpty || answer.trim().isEmpty) {
       throw const GeminiException(
-        'O Gemini respondeu, mas não foi possível interpretar o conteúdo.',
+        'A API respondeu com sucesso, mas o formato da resposta não contém '
+        'um ID de interação e um texto reconhecível.',
         kind: GeminiErrorKind.invalidResponse,
       );
     }
+    return GeminiReply(text: answer.trim(), interactionId: interactionId);
+  }
 
-    return GeminiReply(
-      text: answer,
-      interactionId: interactionId,
-    );
+  Map<String, dynamic> _decodeObject(String body) {
+    try {
+      final value = jsonDecode(body);
+      return value is Map<String, dynamic> ? value : <String, dynamic>{};
+    } on FormatException {
+      return <String, dynamic>{};
+    }
+  }
+
+  String? _safeDetail(String? message) {
+    if (message == null || message.trim().isEmpty) return null;
+    final redacted = _apiKey.isEmpty
+        ? message
+        : message.replaceAll(_apiKey, '[REDACTED]');
+    return redacted.length > 300 ? redacted.substring(0, 300) : redacted;
   }
 
   String _extractOutputText(Map<String, dynamic> response) {
     final outputText = response['output_text'];
-
     if (outputText is String && outputText.trim().isNotEmpty) {
       return outputText.trim();
     }
 
-    final steps = response['steps'];
-
-    if (steps is List) {
+    final outputs = response['outputs'];
+    if (outputs is List) {
       final texts = <String>[];
-
-      for (final step in steps) {
-        if (step is! Map || step['type'] != 'model_output') {
-          continue;
+      for (final output in outputs) {
+        if (output is! Map) continue;
+        final directText = output['text']?.toString();
+        if (directText != null && directText.trim().isNotEmpty) {
+          texts.add(directText.trim());
         }
-
-        final content = step['content'];
-
+        final content = output['content'];
         if (content is List) {
           for (final part in content) {
             if (part is Map && part['type'] == 'text') {
               final text = part['text']?.toString();
-
-              if (text != null && text.trim().isNotEmpty) {
-                texts.add(text.trim());
-              }
+              if (text != null && text.trim().isNotEmpty) texts.add(text.trim());
             }
           }
         }
       }
-
-      if (texts.isNotEmpty) {
-        return texts.join('\n');
-      }
+      if (texts.isNotEmpty) return texts.join('\n');
     }
 
+    final steps = response['steps'];
+    if (steps is List) {
+      final texts = <String>[];
+      for (final step in steps) {
+        if (step is! Map) continue;
+        final type = step['type']?.toString();
+        if (type != 'model_output' && type != 'output_text') continue;
+        final content = step['content'];
+        if (content is String && content.trim().isNotEmpty) {
+          texts.add(content.trim());
+        } else if (content is List) {
+          for (final part in content) {
+            if (part is Map && part['type'] == 'text') {
+              final text = part['text']?.toString();
+              if (text != null && text.trim().isNotEmpty) texts.add(text.trim());
+            }
+          }
+        }
+      }
+      if (texts.isNotEmpty) return texts.join('\n');
+    }
     return '';
   }
 
@@ -228,9 +243,9 @@ $prompt
 
 enum GeminiErrorKind {
   notConfigured,
-  highDemand,
   rateLimit,
   authentication,
+  modelOrEndpoint,
   timeout,
   connection,
   server,
@@ -239,16 +254,13 @@ enum GeminiErrorKind {
 }
 
 class GeminiException implements Exception {
-  const GeminiException(
-    this.message, {
+  const GeminiException(this.message, {
     this.kind = GeminiErrorKind.request,
     this.statusCode,
   });
-
   final String message;
   final GeminiErrorKind kind;
   final int? statusCode;
-
   @override
   String toString() => message;
 }

@@ -614,6 +614,20 @@ Widget _buildError(String message) {
                   height: 1.4,
                 ),
               ),
+              const SizedBox(height: 6),
+              TextButton.icon(
+                onPressed: () => ref
+                    .read(analystControllerProvider.notifier)
+                    .retryLastMessage(),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Tentar novamente'),
+                style: TextButton.styleFrom(
+                  foregroundColor: appAccentEnd,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 32),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
             ],
           ),
         ),

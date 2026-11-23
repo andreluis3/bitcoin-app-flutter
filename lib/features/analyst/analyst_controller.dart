@@ -62,6 +62,22 @@ class AnalystController extends Notifier<AnalystState> {
   }
 
   Future<void> sendMessage(String rawPrompt) async {
+    await _submitPrompt(rawPrompt, appendUserMessage: true);
+  }
+
+  Future<void> retryLastMessage() async {
+    if (state.isSending || state.isLoadingHistory) return;
+    final lastUser = state.messages.reversed
+        .cast<ChatMessage?>()
+        .firstWhere((message) => message?.isUser == true, orElse: () => null);
+    if (lastUser == null) return;
+    await _submitPrompt(lastUser.content, appendUserMessage: false);
+  }
+
+  Future<void> _submitPrompt(
+    String rawPrompt, {
+    required bool appendUserMessage,
+  }) async {
     final prompt = rawPrompt.trim();
     if (prompt.isEmpty || state.isSending || state.isLoadingHistory) return;
 
@@ -73,12 +89,14 @@ class AnalystController extends Notifier<AnalystState> {
     );
 
     state = state.copyWith(
-      messages: [...state.messages, userMessage],
+      messages: appendUserMessage
+          ? [...state.messages, userMessage]
+          : state.messages,
       isSending: true,
       clearError: true,
     );
     try {
-      await _repository.saveMessage(userMessage);
+      if (appendUserMessage) await _repository.saveMessage(userMessage);
       final marketContext = _buildMarketContext();
       final reply = await _gemini.sendMessage(
         prompt: prompt,
