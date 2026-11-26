@@ -56,117 +56,131 @@ MENSAGEM DO USUÁRIO:
 $prompt
 ''';
 
-    final body = <String, dynamic>{
-      'model': _model,
-      'input': input,
-      'store': true,
-      if (previousInteractionId != null &&
-          previousInteractionId.trim().isNotEmpty)
-        'previous_interaction_id': previousInteractionId,
-    };
+    // Se o ID remoto expirou, inicia uma nova interação sem apagar o histórico local.
+    var interactionId = previousInteractionId;
+    var retriedWithoutPreviousId = false;
+    var transientAttempts = 0;
 
-    late final http.Response response;
-    try {
-      response = await _client
-          .post(
-            _endpoint,
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': _apiKey.trim(),
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 60));
-    } on TimeoutException {
-      throw const GeminiException(
-        'A solicitação excedeu 60 segundos. Verifique a conexão e tente novamente.',
-        kind: GeminiErrorKind.timeout,
-      );
-    } on SocketException {
-      throw const GeminiException(
-        'Sem conexão com a internet. Verifique sua rede e tente novamente.',
-        kind: GeminiErrorKind.connection,
-      );
-    } on http.ClientException {
-      throw const GeminiException(
-        'Não foi possível estabelecer conexão com a API do Google Gemini.',
-        kind: GeminiErrorKind.connection,
-      );
-    }
+    while (true) {
+      final body = <String, dynamic>{
+        'model': _model,
+        'input': input,
+        'store': true,
+        if (interactionId != null && interactionId.trim().isNotEmpty)
+          'previous_interaction_id': interactionId,
+      };
 
-    final decoded = _decodeObject(response.body);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+      http.Response response;
+      try {
+        response = await _client.post(
+          _endpoint,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': _apiKey.trim(),
+          },
+          body: jsonEncode(body),
+        ).timeout(const Duration(seconds: 45));
+      } on TimeoutException {
+        if (transientAttempts++ < 1) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          continue;
+        }
+        throw const GeminiException(
+          'O Gemini demorou mais que o esperado. Sua mensagem foi preservada; tente novamente.',
+          kind: GeminiErrorKind.timeout,
+        );
+      } on SocketException {
+        if (transientAttempts++ < 1) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          continue;
+        }
+        throw const GeminiException(
+          'Sem conexão com a internet. A conversa local foi preservada.',
+          kind: GeminiErrorKind.connection,
+        );
+      } on http.ClientException {
+        if (transientAttempts++ < 1) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          continue;
+        }
+        throw const GeminiException(
+          'Não foi possível conectar à API do Gemini. Tente novamente quando a conexão voltar.',
+          kind: GeminiErrorKind.connection,
+        );
+      }
+
+      final decoded = _decodeObject(response.body);
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final id = decoded['id']?.toString();
+        final answer = _extractOutputText(decoded);
+        if (id == null || id.isEmpty || answer.trim().isEmpty) {
+          throw const GeminiException(
+            'O Gemini respondeu, mas não retornou uma interação e um texto válidos.',
+            kind: GeminiErrorKind.invalidResponse,
+          );
+        }
+        return GeminiReply(text: answer.trim(), interactionId: id);
+      }
+
       final error = decoded['error'];
       final apiMessage = error is Map
           ? (error['message'] ?? error['status'] ?? error['code'])?.toString()
           : null;
       final detail = _safeDetail(apiMessage);
 
+      // Uma interação remota inválida não apaga nem compromete as mensagens locais.
+      if (response.statusCode == 400 &&
+          interactionId != null &&
+          interactionId.trim().isNotEmpty &&
+          !retriedWithoutPreviousId) {
+        interactionId = null;
+        retriedWithoutPreviousId = true;
+        continue;
+      }
+
+      if ((response.statusCode == 429 || response.statusCode >= 500) &&
+          transientAttempts++ < 1) {
+        await Future<void>.delayed(
+          Duration(seconds: response.statusCode == 429 ? 5 : 2),
+        );
+        continue;
+      }
+
       switch (response.statusCode) {
-        case 400:
-          throw GeminiException(
-            'A API rejeitou a requisição (HTTP 400). Verifique o modelo, '
-            'o formato da solicitação e o ID da interação anterior.'
-            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
-            kind: GeminiErrorKind.request,
-            statusCode: 400,
-          );
         case 401:
         case 403:
           throw GeminiException(
-            'A API recusou a autenticação/autorização (HTTP ${response.statusCode}). '
-            'Confira se a chave é válida e se a Gemini API está habilitada.',
+            'O Google recusou a chave ou a permissão (HTTP ${response.statusCode}). Confira a configuração da API.',
             kind: GeminiErrorKind.authentication,
             statusCode: response.statusCode,
           );
         case 404:
           throw GeminiException(
-            'O recurso não foi encontrado (HTTP 404). Confira o identificador '
-            'do modelo "$_model" e a disponibilidade do endpoint Interactions.'
-            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
+            'O modelo "$_model" ou o endpoint Interactions não foi encontrado (HTTP 404). Confira a compatibilidade do modelo.',
             kind: GeminiErrorKind.modelOrEndpoint,
             statusCode: 404,
           );
         case 429:
           throw GeminiException(
-            'A cota ou o limite de requisições do Gemini foi atingido (HTTP 429). '
-            'Confira os limites do projeto no Google AI Studio e tente novamente.'
-            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
+            'O limite de requisições do Gemini foi atingido. Aguarde antes de tentar novamente.${detail == null ? '' : '\nDetalhe: $detail'}',
             kind: GeminiErrorKind.rateLimit,
             statusCode: 429,
           );
-        case 500:
-        case 502:
-        case 503:
-        case 504:
-          throw GeminiException(
-            'O serviço do Google Gemini está temporariamente indisponível '
-            '(HTTP ${response.statusCode}). Isso não confirma, por si só, '
-            'que seja alta demanda. Tente novamente mais tarde.'
-            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
-            kind: GeminiErrorKind.server,
-            statusCode: response.statusCode,
-          );
         default:
+          if (response.statusCode >= 500) {
+            throw GeminiException(
+              'O serviço Gemini está temporariamente indisponível (HTTP ${response.statusCode}).${detail == null ? '' : '\nDetalhe: $detail'}',
+              kind: GeminiErrorKind.server,
+              statusCode: response.statusCode,
+            );
+          }
           throw GeminiException(
-            'A API do Gemini retornou HTTP ${response.statusCode}.'
-            '${detail == null ? '' : '\nDetalhe do Google: $detail'}',
+            'A API do Gemini rejeitou a solicitação (HTTP ${response.statusCode}).${detail == null ? '' : '\nDetalhe: $detail'}',
             kind: GeminiErrorKind.request,
             statusCode: response.statusCode,
           );
       }
     }
-
-    final interactionId = decoded['id']?.toString();
-    final answer = _extractOutputText(decoded);
-    if (interactionId == null || interactionId.isEmpty || answer.trim().isEmpty) {
-      throw const GeminiException(
-        'A API respondeu com sucesso, mas o formato da resposta não contém '
-        'um ID de interação e um texto reconhecível.',
-        kind: GeminiErrorKind.invalidResponse,
-      );
-    }
-    return GeminiReply(text: answer.trim(), interactionId: interactionId);
   }
 
   Map<String, dynamic> _decodeObject(String body) {
