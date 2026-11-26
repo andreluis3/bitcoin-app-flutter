@@ -14,6 +14,7 @@ Future<void> main() async {
   // Abre as caixas utilizadas pelo chatbot
   await Hive.openBox<dynamic>('btc_chat_messages');
   await Hive.openBox<dynamic>('btc_chat_metadata');
+  await Hive.openBox<dynamic>('btc_ai_health_events');
 
   // Inicializa o aplicativo com Riverpod
   runApp(

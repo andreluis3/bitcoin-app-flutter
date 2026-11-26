@@ -78,7 +78,7 @@ flutter run -d ID_DO_DISPOSITIVO --dart-define-from-file=env.json
 Exemplo:
 
 ```bash
-flutter run -d EQSGMRVKPVK7VWJB --dart-define-from-file=env.json
+flutter run --dart-define-from-file=env.json -d EQSGMRVKPVK7VWJB
 ```
 
 ## 5. Executar pelo VS Code

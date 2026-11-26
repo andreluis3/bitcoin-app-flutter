@@ -113,6 +113,8 @@ class _AnalystScreenState extends ConsumerState<AnalystScreen> {
             ),
 
             const Divider(height: 1, color: appBorder),
+            if (state.isSending && state.progress != null && state.progress!.isRecovery)
+              _buildRecoveryIndicator(state.progress!),
 
             Expanded(
 
@@ -146,6 +148,36 @@ class _AnalystScreenState extends ConsumerState<AnalystScreen> {
 
     );
 
+  }
+
+  Widget _buildRecoveryIndicator(GeminiProgress progress) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(14, 8, 14, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+      decoration: BoxDecoration(
+        color: appAccentStart.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: appAccentEnd.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 13, height: 13,
+            child: CircularProgressIndicator(strokeWidth: 1.7, color: appAccentEnd),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              progress.message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: appTextSecondary, fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildHeader(

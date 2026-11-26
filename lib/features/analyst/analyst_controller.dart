@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/chat_message.dart';
 import '../../data/repositories/chat_repository.dart';
+import '../../data/models/ai_health_event.dart';
+import '../../data/repositories/ai_health_repository.dart';
 import '../../services/gemini_service.dart';
 import '../market/market_controller.dart';
 
@@ -11,12 +13,14 @@ class AnalystState {
     this.isLoadingHistory = true,
     this.isSending = false,
     this.errorMessage,
+    this.progress,
   });
 
   final List<ChatMessage> messages;
   final bool isLoadingHistory;
   final bool isSending;
   final String? errorMessage;
+  final GeminiProgress? progress;
 
   AnalystState copyWith({
     List<ChatMessage>? messages,
@@ -24,12 +28,15 @@ class AnalystState {
     bool? isSending,
     String? errorMessage,
     bool clearError = false,
+    GeminiProgress? progress,
+    bool clearProgress = false,
   }) {
     return AnalystState(
       messages: messages ?? this.messages,
       isLoadingHistory: isLoadingHistory ?? this.isLoadingHistory,
       isSending: isSending ?? this.isSending,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      progress: clearProgress ? null : progress ?? this.progress,
     );
   }
 }
@@ -37,6 +44,7 @@ class AnalystState {
 class AnalystController extends Notifier<AnalystState> {
   late ChatRepository _repository;
   late GeminiService _gemini;
+  final AiHealthRepository _healthRepository = AiHealthRepository();
 
   @override
   AnalystState build() {
@@ -94,6 +102,7 @@ class AnalystController extends Notifier<AnalystState> {
           : state.messages,
       isSending: true,
       clearError: true,
+      clearProgress: true,
     );
     try {
       if (appendUserMessage) await _repository.saveMessage(userMessage);
@@ -102,6 +111,10 @@ class AnalystController extends Notifier<AnalystState> {
         prompt: prompt,
         marketContext: marketContext,
         previousInteractionId: _repository.getLastInteractionId(),
+        onProgress: (progress) {
+          state = state.copyWith(progress: progress);
+          _saveHealthEvent(progress);
+        },
       );
 
       final assistantMessage = ChatMessage(
@@ -118,17 +131,52 @@ class AnalystController extends Notifier<AnalystState> {
         messages: [...state.messages, assistantMessage],
         isSending: false,
         clearError: true,
+        clearProgress: true,
       );
     } on GeminiException catch (error) {
+      await _saveFailureEvent(error);
       state = state.copyWith(
         isSending: false,
         errorMessage: error.message,
       );
     } catch (error) {
+      await _healthRepository.add(AiHealthEvent(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        type: 'unexpectedError',
+        message: 'Falha inesperada ao enviar mensagem.',
+        createdAt: DateTime.now(),
+      ));
       state = state.copyWith(
         isSending: false,
         errorMessage: 'Ocorreu um erro ao enviar a mensagem: $error',
       );
+    }
+  }
+
+  Future<void> _saveFailureEvent(GeminiException error) async {
+    try {
+      await _healthRepository.add(AiHealthEvent(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        type: 'failure:${error.kind.name}',
+        message: error.message,
+        createdAt: DateTime.now(),
+      ));
+    } catch (_) {
+      // Telemetria não pode bloquear o tratamento do erro do chat.
+    }
+  }
+
+  Future<void> _saveHealthEvent(GeminiProgress progress) async {
+    try {
+      await _healthRepository.add(AiHealthEvent(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        type: progress.type.name,
+        message: progress.message,
+        model: progress.model,
+        createdAt: DateTime.now(),
+      ));
+    } catch (_) {
+      // A falha ao salvar telemetria nunca deve interromper o chat.
     }
   }
 

@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
@@ -27,32 +26,49 @@ class MarketMetrics extends StatelessWidget {
       _MetricTile(
         label: 'Máxima',
         value: '$symbol${maxPrice.toStringAsFixed(0)}',
+        icon: Icons.trending_up_rounded,
       ),
       _MetricTile(
         label: 'Mínima',
         value: '$symbol${minPrice.toStringAsFixed(0)}',
+        icon: Icons.trending_down_rounded,
       ),
       _MetricTile(
         label: 'Volume',
         value: '$symbol${formatCompactVolume(volume)}',
+        icon: Icons.bar_chart_rounded,
       ),
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth < 380 ? 2 : 3;
+        if (constraints.maxWidth < 600) {
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: metrics[0]),
+                  const SizedBox(width: 10),
+                  Expanded(child: metrics[1]),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: metrics[2],
+              ),
+            ],
+          );
+        }
 
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: metrics.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            mainAxisExtent: 88,
-          ),
-          itemBuilder: (context, index) => metrics[index],
+        return Row(
+          children: [
+            for (int i = 0; i < metrics.length; i++) ...[
+              Expanded(child: metrics[i]),
+              if (i != metrics.length - 1)
+                const SizedBox(width: 12),
+            ],
+          ],
         );
       },
     );
@@ -63,38 +79,57 @@ class _MetricTile extends StatelessWidget {
   const _MetricTile({
     required this.label,
     required this.value,
+    required this.icon,
   });
 
   final String label;
   final String value;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      height: 108,
       padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 10,
+        horizontal: 14,
+        vertical: 14,
       ),
       decoration: BoxDecoration(
         color: appSurface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: appBorder),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: appTextSecondary,
-              fontSize: 12,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: appAccentEnd,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: appTextSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 7),
-          Flexible(
+
+          const SizedBox(height: 10),
+
+          SizedBox(
+            width: double.infinity,
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
@@ -102,8 +137,8 @@ class _MetricTile extends StatelessWidget {
                 maxLines: 1,
                 style: const TextStyle(
                   color: appTextPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),

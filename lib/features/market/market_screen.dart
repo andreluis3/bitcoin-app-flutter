@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,17 +20,27 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
   final TextEditingController upperController = TextEditingController();
   final TextEditingController lowerController = TextEditingController();
 
-  // Rascunhos independentes para cada moeda.
+  final ScrollController _periodScrollController = ScrollController();
+
   final Map<MarketCurrency, String> _upperDrafts = {};
   final Map<MarketCurrency, String> _lowerDrafts = {};
 
   MarketCurrency? _lastCurrency;
+
   double? _lastUpperLimit;
   double? _lastLowerLimit;
 
   bool _isEditingUpper = false;
   bool _isEditingLower = false;
   bool _isSaving = false;
+
+  static const List<String> _periods = [
+    '1H',
+    '24H',
+    '7D',
+    '1M',
+    '1Y',
+  ];
 
   @override
   void initState() {
@@ -43,6 +52,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
 
   void _onUpperChanged() {
     final currency = _lastCurrency;
+
     if (currency == null) return;
 
     _upperDrafts[currency] = upperController.text;
@@ -54,6 +64,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
 
   void _onLowerChanged() {
     final currency = _lastCurrency;
+
     if (currency == null) return;
 
     _lowerDrafts[currency] = lowerController.text;
@@ -85,39 +96,35 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
     required double lower,
   }) {
     final currencyChanged = _lastCurrency != currency;
+
     final limitsChanged =
         _lastUpperLimit != upper || _lastLowerLimit != lower;
 
     if (!currencyChanged && !limitsChanged) return;
 
     if (currencyChanged) {
-      // Guarda o que estava sendo digitado na moeda anterior.
       final previousCurrency = _lastCurrency;
+
       if (previousCurrency != null) {
         _upperDrafts[previousCurrency] = upperController.text;
         _lowerDrafts[previousCurrency] = lowerController.text;
       }
 
       _lastCurrency = currency;
+
       _isEditingUpper = false;
       _isEditingLower = false;
 
-      // Restaura o rascunho da moeda selecionada, se existir.
-      final upperDraft = _upperDrafts[currency];
-      final lowerDraft = _lowerDrafts[currency];
-
       _setControllerText(
         upperController,
-        upperDraft ?? _formatLimit(upper),
+        _upperDrafts[currency] ?? _formatLimit(upper),
       );
+
       _setControllerText(
         lowerController,
-        lowerDraft ?? _formatLimit(lower),
+        _lowerDrafts[currency] ?? _formatLimit(lower),
       );
     } else {
-      // Atualizações periódicas de preço não alteram os campos.
-      // Só sincroniza limites realmente alterados externamente
-      // quando o respectivo campo não está em edição.
       if (!_isEditingUpper) {
         _setControllerText(
           upperController,
@@ -141,8 +148,12 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
   void dispose() {
     upperController.removeListener(_onUpperChanged);
     lowerController.removeListener(_onLowerChanged);
+
     upperController.dispose();
     lowerController.dispose();
+
+    _periodScrollController.dispose();
+
     super.dispose();
   }
 
@@ -159,234 +170,268 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
 
     final currentPrice = state.price;
 
+    final maxPrice = state.chartData.isEmpty
+        ? 0.0
+        : state.chartData
+            .map((c) => c.high)
+            .reduce((a, b) => a > b ? a : b);
+
+    final minPrice = state.chartData.isEmpty
+        ? 0.0
+        : state.chartData
+            .map((c) => c.low)
+            .reduce((a, b) => a < b ? a : b);
+
+    final volume = state.chartData.fold<double>(
+      0,
+      (sum, candle) => sum + candle.volume,
+    );
+
     return Scaffold(
       backgroundColor: appBackground,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                  final narrow = constraints.maxWidth < 380;
-
-                  final periodChips = Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: ['1H', '24H', '7D', '1M', '1Y'].map((period) {
-                      return ChoiceChip(
-                        label: Text(period),
-                        selected: state.selectedPeriod == period,
-                        onSelected: (_) => controller.setPeriod(period),
-                      );
-                    }).toList(),
-                  );
-
-                  if (narrow) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Período',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        periodChips,
-                      ],
-                    );
-                  }
-
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const Text(
-                              'Período',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(child: periodChips),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Atualizar agora',
-                    onPressed: state.isLoading
-                        ? null
-                        : () => controller.refresh(),
-                    icon: const Icon(Icons.refresh_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 18,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: appSuccess.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: appSuccess.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: Text(
-                      state.isLoading && currentPrice.price == 0
-                          ? 'Binance: conectando'
-                          : 'API: Binance · 5s',
-                      style: const TextStyle(
-                        color: appSuccess,
-                        fontSize: 11,
-                      ),
-                    ),
+                  // STATUS DA API
+                  _buildApiStatus(state, currentPrice),
+
+                  const SizedBox(height: 18),
+
+                  // SELETOR DE MOEDA
+                  _buildCurrencySelector(state, controller),
+
+                  const SizedBox(height: 16),
+
+                  // CARD BITCOIN
+                  BitcoinPriceCard(
+                    price: currentPrice,
+                    currency: state.currency,
+                    changePercent24h: currentPrice.changePercent24h,
+                    isLoading:
+                        state.isLoading && currentPrice.price == 0,
                   ),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Cotações públicas · atualização automática',
-                      style: TextStyle(
-                        color: appTextSecondary,
-                        fontSize: 11,
-                      ),
-                    ),
+
+                  const SizedBox(height: 22),
+
+                  // SELETOR ÚNICO DE PERÍODO
+                  _buildPeriodSelector(
+                    state: state,
+                    controller: controller,
                   ),
+
+                  const SizedBox(height: 16),
+
+                  // GRÁFICO
+                  if (state.chartData.isEmpty && state.isLoading)
+                    const SizedBox(
+                      height: 250,
+                      child: Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    )
+                  else
+                    BitcoinChart(
+                      candles: state.chartData,
+                      currency: state.currency,
+                    ),
+
+                  const SizedBox(height: 18),
+
+                  // ESTATÍSTICAS
+                  MarketMetrics(
+                    maxPrice: maxPrice,
+                    minPrice: minPrice,
+                    volume: volume,
+                    currency: state.currency,
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // LIMITES DE ALERTA
+                  AlertThresholdForm(
+                    upperController: upperController,
+                    lowerController: lowerController,
+                    upperLimit: state.upperLimit,
+                    lowerLimit: state.lowerLimit,
+                    onSave: () {
+                      if (!_isSaving) {
+                        _saveLimits(controller);
+                      }
+                    },
+                  ),
+
+                  const SizedBox(height: 24),
                 ],
               ),
-              if (state.errorMessage != null) ...[
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: appDanger.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: appDanger.withValues(alpha: 0.2),
-                    ),
-                  ),
-                  child: Text(
-                    state.errorMessage!,
-                    style: const TextStyle(
-                      color: appDanger,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              SegmentedButton<MarketCurrency>(
-                selectedIcon: null,
-                segments: const [
-                  ButtonSegment(
-                    value: MarketCurrency.usd,
-                    label: Text('USD'),
-                  ),
-                  ButtonSegment(
-                    value: MarketCurrency.brl,
-                    label: Text('BRL'),
-                  ),
-                ],
-                selected: {state.currency},
-                onSelectionChanged: (selection) {
-                  if (selection.isNotEmpty) {
-                    controller.setCurrency(selection.first);
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              BitcoinPriceCard(
-                price: currentPrice,
-                currency: state.currency,
-                changePercent24h: currentPrice.changePercent24h,
-                isLoading: state.isLoading && currentPrice.price == 0,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  const Text(
-                    'Período',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: ['1H', '24H', '7D', '1M', '1Y']
-                        .map((period) {
-                      return ChoiceChip(
-                        label: Text(period),
-                        selected: state.selectedPeriod == period,
-                        onSelected: (_) => controller.setPeriod(period),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Mantém o gráfico visível durante atualizações silenciosas.
-              if (state.chartData.isEmpty && state.isLoading)
-                const SizedBox(
-                  height: 210,
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else
-                BitcoinChart(
-                  candles: state.chartData,
-                  currency: state.currency,
-                ),
-              const SizedBox(height: 16),
-              MarketMetrics(
-                maxPrice: state.chartData.isEmpty
-                    ? 0
-                    : state.chartData
-                        .map((c) => c.high)
-                        .reduce((a, b) => a > b ? a : b),
-                minPrice: state.chartData.isEmpty
-                    ? 0
-                    : state.chartData
-                        .map((c) => c.low)
-                        .reduce((a, b) => a < b ? a : b),
-                volume: state.chartData.fold(
-                  0.0,
-                  (sum, candle) => sum + candle.volume,
-                ),
-                currency: state.currency,
-              ),
-              const SizedBox(height: 16),
-              AlertThresholdForm(
-              upperController: upperController,
-              lowerController: lowerController,
-              upperLimit: state.upperLimit,
-              lowerLimit: state.lowerLimit,
-              onSave: () {
-                if (!_isSaving) {
-                  _saveLimits(controller);
-                }
-              },
             ),
-            const SizedBox(height: 16),
-            ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildApiStatus(dynamic state, dynamic currentPrice) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
+          ),
+          decoration: BoxDecoration(
+            color: appSuccess.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: appSuccess.withValues(alpha: 0.30),
+            ),
+          ),
+          child: Text(
+            state.isLoading && currentPrice.price == 0
+                ? 'Binance: conectando'
+                : 'API: Binance · 5s',
+            style: const TextStyle(
+              color: appSuccess,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Text(
+            'Cotações públicas · atualização automática',
+            style: TextStyle(
+              color: appTextSecondary,
+              fontSize: 11,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Atualizar agora',
+          onPressed: state.isLoading
+              ? null
+              : () => ref
+                  .read(marketControllerProvider.notifier)
+                  .refresh(),
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCurrencySelector(
+    dynamic state,
+    MarketController controller,
+  ) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: SegmentedButton<MarketCurrency>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(
+            value: MarketCurrency.usd,
+            label: Text('USDT'),
+          ),
+          ButtonSegment(
+            value: MarketCurrency.brl,
+            label: Text('BRL'),
+          ),
+        ],
+        selected: {state.currency},
+        onSelectionChanged: (selection) {
+          if (selection.isNotEmpty) {
+            controller.setCurrency(selection.first);
+          }
+        },
+      ),
+    );
+  }
+
+  Widget _buildPeriodSelector({
+    required dynamic state,
+    required MarketController controller,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.bar_chart_rounded,
+              color: appAccentEnd,
+              size: 21,
+            ),
+            const SizedBox(width: 9),
+            const Text(
+              'Período',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              state.selectedPeriod,
+              style: const TextStyle(
+                color: appTextSecondary,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 13),
+
+        Scrollbar(
+          controller: _periodScrollController,
+          thumbVisibility: true,
+          scrollbarOrientation: ScrollbarOrientation.bottom,
+          child: SingleChildScrollView(
+            controller: _periodScrollController,
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: _periods.map((period) {
+                final selected = state.selectedPeriod == period;
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: SizedBox(
+                    width: 66,
+                    height: 46,
+                    child: ChoiceChip(
+                      label: Center(
+                        child: Text(period),
+                      ),
+                      selected: selected,
+                      onSelected: (_) {
+                        controller.setPeriod(period);
+                      },
+                      showCheckmark: true,
+                      padding: EdgeInsets.zero,
+                      labelStyle: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: selected
+                            ? Colors.white
+                            : appTextSecondary,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -396,6 +441,7 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
     final upper = double.tryParse(
       upperController.text.trim().replaceAll(',', '.'),
     );
+
     final lower = double.tryParse(
       lowerController.text.trim().replaceAll(',', '.'),
     );
@@ -428,7 +474,8 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
       if (!mounted) return;
 
       if (saved) {
-        final currency = ref.read(marketControllerProvider).currency;
+        final currency =
+            ref.read(marketControllerProvider).currency;
 
         _upperDrafts[currency] = _formatLimit(upper);
         _lowerDrafts[currency] = _formatLimit(lower);
@@ -436,8 +483,15 @@ class _MarketScreenState extends ConsumerState<MarketScreen> {
         _isEditingUpper = false;
         _isEditingLower = false;
 
-        _setControllerText(upperController, _formatLimit(upper));
-        _setControllerText(lowerController, _formatLimit(lower));
+        _setControllerText(
+          upperController,
+          _formatLimit(upper),
+        );
+
+        _setControllerText(
+          lowerController,
+          _formatLimit(lower),
+        );
 
         _showMessage('Limites salvos neste dispositivo.');
       } else {
